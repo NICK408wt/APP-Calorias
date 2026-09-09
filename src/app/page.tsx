@@ -15,7 +15,6 @@ export default function Home() {
   const [nombre, setNombre] = useState('');
   const [calorias, setCalorias] = useState('');
   const [tipo, setTipo] = useState<'desayuno' | 'almuerzo' | 'cena' | 'snack'>('almuerzo');
-  const [apiKey, setApiKey] = useState('');
   const [cargandoIA, setCargandoIA] = useState(false);
   const [errorIA, setErrorIA] = useState('');
 
@@ -29,13 +28,15 @@ export default function Home() {
     });
   };
 
-  // Escanear la foto con OpenAI Vision (gpt-4o-mini)
+  // Escanear foto usando la API Key guardada en Vercel
   const procesarFotoConOpenAI = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const archivo = e.target.files?.[0];
     if (!archivo) return;
 
+    const apiKey = process.env.NEXT_PUBLIC_OPENAI_API_KEY;
+
     if (!apiKey) {
-      setErrorIA('Ingresa tu API Key de OpenAI arriba para poder usar la cámara.');
+      setErrorIA('No se encontró la API Key guardada en Vercel. Revisa la configuración de Environment Variables.');
       return;
     }
 
@@ -89,7 +90,7 @@ export default function Home() {
       setCalorias(String(resultado.calorias || 300));
     } catch (err: any) {
       console.error(err);
-      setErrorIA('Error al analizar la foto. Revisa que tu API Key de OpenAI sea válida y tenga crédito.');
+      setErrorIA('Error al analizar la foto. Revisa que tu API Key en Vercel tenga crédito activo.');
     } finally {
       setCargandoIA(false);
     }
@@ -121,20 +122,6 @@ export default function Home() {
   return (
     <main style={{ maxWidth: '600px', margin: '30px auto', padding: '20px', fontFamily: 'system-ui, sans-serif' }}>
       <h1 style={{ textAlign: 'center', color: '#111827', marginBottom: '20px' }}>Contador de Calorías IA 📸</h1>
-
-      {/* Clave API OpenAI */}
-      <div style={{ background: '#F3E8FF', padding: '12px', borderRadius: '8px', marginBottom: '20px', border: '1px solid #A855F7' }}>
-        <label style={{ fontSize: '13px', fontWeight: 'bold', color: '#6B21A8', display: 'block', marginBottom: '4px' }}>
-          Configuración inicial: API Key de OpenAI (sk-...)
-        </label>
-        <input
-          type="password"
-          placeholder="Pega aquí tu OpenAI API Key"
-          value={apiKey}
-          onChange={(e) => setApiKey(e.target.value)}
-          style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #D1D5DB', boxSizing: 'border-box' }}
-        />
-      </div>
 
       {/* Resumen del día */}
       <div style={{ background: '#F3F4F6', padding: '20px', borderRadius: '12px', marginBottom: '24px' }}>
@@ -213,7 +200,7 @@ export default function Home() {
         </button>
       </form>
 
-      {/* Registro */}
+      {/* Registro del Día */}
       <h3 style={{ borderBottom: '2px solid #E5E7EB', paddingBottom: '8px' }}>Registro del Día</h3>
       <ul style={{ listStyle: 'none', padding: 0 }}>
         {alimentos.length === 0 ? (
