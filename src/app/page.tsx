@@ -14,20 +14,99 @@ export default function Home() {
   const [alimentos, setAlimentos] = useState<Alimento[]>([]);
   const [nombre, setNombre] = useState('');
   const [calorias, setCalorias] = useState('');
-  const [tipo, setTipo] = useState<'desayuno' | 'almuerzo' | 'cena' | 'snack'>('desayuno');
+  const [tipo, setTipo] = useState<'desayuno' | 'almuerzo' | 'cena' | 'snack'>('almuerzo');
+  const [apiKey, setApiKey] = useState('');
+  const [cargandoIA, setCargandoIA] = useState(false);
+  const [errorIA, setErrorIA] = useState('');
+
+  // Convertir la imagen a Base64
+  const convertirImagenBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = (error) => reject(error);
+    });
+  };
+
+  // Escanear la foto con OpenAI Vision (gpt-4o-mini)
+  const procesarFotoConOpenAI = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const archivo = e.target.files?.[0];
+    if (!archivo) return;
+
+    if (!apiKey) {
+      setErrorIA('Ingresa tu API Key de OpenAI arriba para poder usar la cámara.');
+      return;
+    }
+
+    setErrorIA('');
+    setCargandoIA(true);
+
+    try {
+      const base64Image = await convertirImagenBase64(archivo);
+
+      const res = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'text',
+                  text: 'Analiza esta foto de comida. Identifica el plato y calcula las calorías aproximadas. Responde ÚNICAMENTE un objeto JSON válido con este formato exacto: {"nombre": "Nombre del plato", "calorias": 450}. No agregues texto ni markdown adicional.',
+                },
+                {
+                  type: 'image_url',
+                  image_url: {
+                    url: base64Image,
+                  },
+                },
+              ],
+            },
+          ],
+          max_tokens: 150,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (data.error) {
+        throw new Error(data.error.message || 'Error en la API de OpenAI');
+      }
+
+      const respuestaTexto = data.choices[0].message.content.trim();
+      const jsonLimpio = respuestaTexto.replace(/```json|```/g, '').trim();
+      const resultado = JSON.parse(jsonLimpio);
+
+      // Autocompletar el formulario
+      setNombre(resultado.nombre || 'Plato detectado');
+      setCalorias(String(resultado.calorias || 300));
+    } catch (err: any) {
+      console.error(err);
+      setErrorIA('Error al analizar la foto. Revisa que tu API Key de OpenAI sea válida y tenga crédito.');
+    } finally {
+      setCargandoIA(false);
+    }
+  };
 
   const agregarAlimento = (e: React.FormEvent) => {
     e.preventDefault();
     if (!nombre || !calorias) return;
 
-    const nuevoAlimento: Alimento = {
+    const nuevo: Alimento = {
       id: Date.now(),
       nombre,
       calorias: Number(calorias),
       tipo,
     };
 
-    setAlimentos([...alimentos, nuevoAlimento]);
+    setAlimentos([...alimentos, nuevo]);
     setNombre('');
     setCalorias('');
   };
@@ -40,13 +119,27 @@ export default function Home() {
   const porcentaje = Math.min((totalCalorias / metaCalorias) * 100, 100);
 
   return (
-    <main style={{ maxWidth: '600px', margin: '40px auto', padding: '20px', fontFamily: 'system-ui, sans-serif' }}>
-      <h1 style={{ textAlign: 'center', color: '#111827' }}>Contador de Calorías</h1>
+    <main style={{ maxWidth: '600px', margin: '30px auto', padding: '20px', fontFamily: 'system-ui, sans-serif' }}>
+      <h1 style={{ textAlign: 'center', color: '#111827', marginBottom: '20px' }}>Contador de Calorías IA 📸</h1>
 
-      {/* Resumen y Barra de Progreso */}
+      {/* Clave API OpenAI */}
+      <div style={{ background: '#F3E8FF', padding: '12px', borderRadius: '8px', marginBottom: '20px', border: '1px solid #A855F7' }}>
+        <label style={{ fontSize: '13px', fontWeight: 'bold', color: '#6B21A8', display: 'block', marginBottom: '4px' }}>
+          Configuración inicial: API Key de OpenAI (sk-...)
+        </label>
+        <input
+          type="password"
+          placeholder="Pega aquí tu OpenAI API Key"
+          value={apiKey}
+          onChange={(e) => setApiKey(e.target.value)}
+          style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #D1D5DB', boxSizing: 'border-box' }}
+        />
+      </div>
+
+      {/* Resumen del día */}
       <div style={{ background: '#F3F4F6', padding: '20px', borderRadius: '12px', marginBottom: '24px' }}>
         <h2 style={{ margin: '0 0 10px 0', fontSize: '18px', color: '#374151' }}>
-          Total: {totalCalorias} / {metaCalorias} kcal
+          Consumo diario: {totalCalorias} / {metaCalorias} kcal
         </h2>
         <div style={{ background: '#E5E7EB', height: '12px', borderRadius: '6px', overflow: 'hidden' }}>
           <div
@@ -60,11 +153,27 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Formulario de Entrada */}
+      {/* Escáner de Foto */}
+      <div style={{ marginBottom: '20px', textAlign: 'center', border: '2px dashed #9333EA', padding: '20px', borderRadius: '12px', background: '#FAF5FF' }}>
+        <label style={{ cursor: 'pointer', fontWeight: 'bold', color: '#9333EA', display: 'block' }}>
+          {cargandoIA ? '⏳ OpenAI está analizando tu plato...' : '📸 Sacar Foto a la Comida / Subir Imagen'}
+          <input
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={procesarFotoConOpenAI}
+            disabled={cargandoIA}
+            style={{ display: 'none' }}
+          />
+        </label>
+        {errorIA && <p style={{ color: '#DC2626', fontSize: '13px', marginTop: '8px' }}>{errorIA}</p>}
+      </div>
+
+      {/* Formulario */}
       <form onSubmit={agregarAlimento} style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '30px' }}>
         <input
           type="text"
-          placeholder="Nombre del alimento (ej. Manzana)"
+          placeholder="Nombre del alimento"
           value={nombre}
           onChange={(e) => setNombre(e.target.value)}
           style={{ padding: '10px', borderRadius: '6px', border: '1px solid #D1D5DB' }}
@@ -92,7 +201,7 @@ export default function Home() {
           type="submit"
           style={{
             padding: '12px',
-            background: '#2563EB',
+            background: '#9333EA',
             color: '#FFF',
             border: 'none',
             borderRadius: '6px',
@@ -100,15 +209,15 @@ export default function Home() {
             cursor: 'pointer',
           }}
         >
-          Agregar Alimento
+          Guardar en Registro del Día
         </button>
       </form>
 
-      {/* Lista de Registro */}
+      {/* Registro */}
       <h3 style={{ borderBottom: '2px solid #E5E7EB', paddingBottom: '8px' }}>Registro del Día</h3>
       <ul style={{ listStyle: 'none', padding: 0 }}>
         {alimentos.length === 0 ? (
-          <p style={{ color: '#6B7280', textAlign: 'center' }}>No has agregado alimentos aún.</p>
+          <p style={{ color: '#6B7280', textAlign: 'center' }}>No has registrado comidas hoy.</p>
         ) : (
           alimentos.map((item) => (
             <li
@@ -128,10 +237,10 @@ export default function Home() {
                 </span>
               </div>
               <div>
-                <span style={{ marginRight: '12px', fontWeight: '500' }}>{item.calorias} kcal</span>
+                <span style={{ marginRight: '12px', fontWeight: 'bold', color: '#1F2937' }}>{item.calorias} kcal</span>
                 <button
                   onClick={() => eliminarAlimento(item.id)}
-                  style={{ background: 'transparent', border: 'none', color: '#EF4444', cursor: 'pointer' }}
+                  style={{ background: 'transparent', border: 'none', color: '#EF4444', cursor: 'pointer', fontWeight: 'bold' }}
                 >
                   X
                 </button>
